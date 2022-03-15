@@ -19,28 +19,35 @@ from operator import itemgetter
 from statistics import mean, median
 from string import Template
 
-config = {
+default_config = {
     "REPORT_SIZE": 1000,
     "REPORT_DIR": "./reports",
     "LOG_DIR": "./log",
     "ALLOW_PERC_ERRORS": 50,
-    "LOGGING_FILE": None
+    "LOGGING_FILE": None,
+    "CONFIG": "./config.cfg"
 }
 
 
-def load_config(config):
+def load_config(default_config):
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="./config.cfg", type=str, help="Path to config")
     args = parser.parse_args()
+
     if os.path.isfile(args.config):
-        config = configparser.ConfigParser(config, allow_no_value=True)
-        config.read(args.config)
-        return config
+        config_path = args.config
+    elif os.path.isfile(default_config.get("CONFIG")):
+        config_path = default_config.get("CONFIG")
+
     else:
         raise FileExistsError(f"Cant load config file {args.config}")
 
+    config = configparser.ConfigParser(default_config, allow_no_value=True)
+    config.read(config_path)
+    return config
 
-cfg = load_config(config)
+
+cfg = load_config(default_config)
 logging.basicConfig(
     format='[%(asctime)s] %(levelname)s %(message)s',
     datefmt="%Y.%m.%d %H:%M:%S",
@@ -48,7 +55,6 @@ logging.basicConfig(
     encoding='utf-8',
     level=logging.DEBUG
 )
-
 logger = logging.getLogger()
 
 
@@ -134,7 +140,7 @@ def create_report(report_data, count_all_time):
         res = {
             "url": url,
             "count": info["count"],
-            "count_perc": (info["count"] /  len(report_data) * 100).__round__(3),
+            "count_perc": (info["count"] / len(report_data) * 100).__round__(3),
             "time_avg": mean(info["list_request_time"]).__round__(3),
             "time_max": max(info["list_request_time"]),
             "time_med": median(info["list_request_time"]).__round__(3),
@@ -165,10 +171,10 @@ def main(cfg):
     date, filename = find_last_date_log(cfg.get("Settings", "LOG_DIR"), cfg.get("Settings", "REPORT_DIR"))
     logfiles = log_open(filename)
     loglines = log_lines(logfiles)
-    log_parse = log_parser(loglines)
-    report_data, count_all_time = collect_report_data(log_parse, cfg.get("Settings", "ALLOW_PERC_ERRORS"))
-    report = create_report(report_data, count_all_time)
-    render_report(cfg, date, report)
+    # log_parse = log_parser(loglines)
+    # report_data, count_all_time = collect_report_data(log_parse, cfg.get("Settings", "ALLOW_PERC_ERRORS"))
+    # report = create_report(report_data, count_all_time)
+    # render_report(cfg, date, report)
 
 
 if __name__ == "__main__":
