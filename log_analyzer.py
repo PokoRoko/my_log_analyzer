@@ -1,9 +1,11 @@
 #!/usr/bin/env python
+
 # -*- coding: utf-8 -*-
 # log_format ui_short '$remote_addr $remote_user $http_x_real_ip [$time_local] "$request" '
 # '$status $body_bytes_sent "$http_referer" '
 # '"$http_user_agent" "$http_x_forwarded_for" "$http_X_REQUEST_ID" "$http_X_RB_USER" '
 # '$request_time';
+
 import argparse
 import configparser
 import datetime
@@ -13,6 +15,7 @@ import fnmatch
 import gzip
 import re
 from collections import defaultdict
+from operator import itemgetter
 from statistics import mean, median
 from string import Template
 
@@ -32,18 +35,20 @@ def load_config(config):
     if os.path.isfile(args.config):
         config = configparser.ConfigParser(config, allow_no_value=True)
         config.read(args.config)
-        logging.info(f"Load config file {args.config}")
         return config
     else:
         raise FileExistsError(f"Cant load config file {args.config}")
 
 
 cfg = load_config(config)
-logging.basicConfig(format='[%(asctime)s] %(levelname)s %(message)s',
-                    datefmt="%Y.%m.%d %H:%M:%S",
-                    filename=cfg.get("Settings", "LOGGING_FILE"),
-                    encoding='utf-8',
-                    level=logging.DEBUG)
+logging.basicConfig(
+    format='[%(asctime)s] %(levelname)s %(message)s',
+    datefmt="%Y.%m.%d %H:%M:%S",
+    filename=None,
+    encoding='utf-8',
+    level=logging.DEBUG
+)
+
 logger = logging.getLogger()
 
 
@@ -98,7 +103,7 @@ def log_parser(lines):
 
 
 def collect_report_data(log_parse, allow_perc_error):
-    logger.info(f"Start collect report data")
+    logger.info(f"Start collect report data...")
     res = defaultdict(dict)
     count_all_time = 0
     count_none_line = 0
@@ -119,17 +124,17 @@ def collect_report_data(log_parse, allow_perc_error):
     #     logger.warning(f"Too many errors while reading file\nAllow percent errors: {allow_perc_error}%")
     #     raise ValueError
 
-    logger.info(f"Complete collect data to report\nLog processed:{len(res)}\nLog unread:{count_none_line}")
+    logger.info(f"Complete collect data to report. Log processed:{len(res)}. Log unread:{count_none_line}")
     return res, count_all_time
 
 
 def create_report(report_data, count_all_time):
-    len_data = len(report_data)
+    logger.info(f"Start create report...")
     for url, info in report_data.items():
         res = {
             "url": url,
             "count": info["count"],
-            "count_perc": (info["count"] / len_data * 100).__round__(3),
+            "count_perc": (info["count"] /  len(report_data) * 100).__round__(3),
             "time_avg": mean(info["list_request_time"]).__round__(3),
             "time_max": max(info["list_request_time"]),
             "time_med": median(info["list_request_time"]).__round__(3),
@@ -137,12 +142,15 @@ def create_report(report_data, count_all_time):
             "time_sum": sum(info["list_request_time"]).__round__(3),
         }
         yield res
+    logger.info(f"Complete create report. Log: {len(report_data)}")
 
 
 def render_report(cfg, date, report):
     with open("./reports/report.html", "r") as report_template:
         template = Template(report_template.read())
-        res = template.safe_substitute(table_json=list(report))
+        report_size = int(cfg.get("Settings", "REPORT_SIZE"))
+        sorted_report = sorted(list(report), key=itemgetter('time_sum'), reverse=True)
+        res = template.safe_substitute(table_json=sorted_report[0:report_size])
 
         pat = date.strftime("%Y.%m.%d")
         file_path = os.path.join(cfg.get("Settings", "REPORT_DIR"), f"report-{pat}.html")
@@ -150,6 +158,7 @@ def render_report(cfg, date, report):
         report_file = open(file_path, "w")
         report_file.write(res)
         report_file.close()
+        logger.info(f"Complete render report. Log: {report_size}. Path: {file_path}")
 
 
 def main(cfg):
