@@ -9,10 +9,10 @@
 import argparse
 import configparser
 import datetime
-import logging
-import os
 import fnmatch
 import gzip
+import logging
+import os
 import re
 from collections import defaultdict
 from operator import itemgetter
@@ -25,7 +25,6 @@ default_config = {
     "LOG_DIR": "./log",
     "ALLOW_PERC_ERRORS": 50,
     "LOGGING_FILE": None,
-    "CONFIG": "./config.cfg"
 }
 
 
@@ -109,7 +108,7 @@ def log_parser(lines):
 
 
 def collect_report_data(log_parse, allow_perc_error):
-    logger.info(f"Start collect report data...")
+    logger.info("Start collect report data...")
     res = defaultdict(dict)
     count_all_time = 0
     count_none_line = 0
@@ -126,16 +125,16 @@ def collect_report_data(log_parse, allow_perc_error):
         else:
             count_none_line += 1
 
-    # if count_none_line > len(res) * (allow_perc_error * 0.01):
-    #     logger.warning(f"Too many errors while reading file\nAllow percent errors: {allow_perc_error}%")
-    #     raise ValueError
+    if count_none_line > len(res) * (allow_perc_error * 0.01):
+        logger.warning(f"Too many errors while reading file\nAllow percent errors: {allow_perc_error}%")
+        raise ValueError
 
     logger.info(f"Complete collect data to report. Log processed:{len(res)}. Log unread:{count_none_line}")
     return res, count_all_time
 
 
 def create_report(report_data, count_all_time):
-    logger.info(f"Start create report...")
+    logger.info("Start create report...")
     for url, info in report_data.items():
         res = {
             "url": url,
@@ -171,10 +170,10 @@ def main(cfg):
     date, filename = find_last_date_log(cfg.get("Settings", "LOG_DIR"), cfg.get("Settings", "REPORT_DIR"))
     logfiles = log_open(filename)
     loglines = log_lines(logfiles)
-    # log_parse = log_parser(loglines)
-    # report_data, count_all_time = collect_report_data(log_parse, cfg.get("Settings", "ALLOW_PERC_ERRORS"))
-    # report = create_report(report_data, count_all_time)
-    # render_report(cfg, date, report)
+    log_parse = log_parser(loglines)
+    report_data, count_all_time = collect_report_data(log_parse, cfg.get("Settings", "ALLOW_PERC_ERRORS"))
+    report = create_report(report_data, count_all_time)
+    render_report(cfg, date, report)
 
 
 if __name__ == "__main__":
