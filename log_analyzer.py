@@ -67,6 +67,7 @@ def check_exist_report(pat, report_dir):
 def find_last_date_log(log_dir, report_dir):
     for path, dirlist, filelist in os.walk(log_dir):
         date_list = re.findall(r'\d+', str(filelist))
+        logger.warning(date_list)
         pat = max(date_list)
         date, report_exist = check_exist_report(pat, report_dir)
         if report_exist:
