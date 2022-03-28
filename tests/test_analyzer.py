@@ -1,7 +1,10 @@
+import datetime
+import os
+import sys
 import unittest
-from time import sleep
 
-from log_analyzer import *
+
+
 
 
 class TestMyLogAnalyzer(unittest.TestCase):
@@ -65,8 +68,8 @@ class TestMyLogAnalyzer(unittest.TestCase):
     def test_find_last_date_log(self):
         log_file = open(self.name_log_file, "w")
 
-        date, log_path = find_last_date_log("./", "./")
-        self.assertEqual(log_path, "./" + self.name_log_file)
+        date, log_path = find_last_date_log("./tests", "./tests")
+        self.assertEqual(log_path, "./tests/" + self.name_log_file)
         report_file = open(self.name_report_file, "w")
 
         with self.assertRaises(ValueError):
@@ -102,4 +105,6 @@ class TestMyLogAnalyzer(unittest.TestCase):
 
 
 if __name__ == '__main__':
+    from log_analyzer import check_exist_report, find_last_date_log, collect_report_data, log_parser, log_open, \
+        create_report
     unittest.main()
