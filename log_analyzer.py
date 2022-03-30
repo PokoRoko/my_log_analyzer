@@ -28,11 +28,7 @@ default_config = {
 }
 
 
-def load_config(default_config):
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default="./config.cfg", type=str, help="Path to config")
-    args = parser.parse_args()
-
+def load_config(default_config, args):
     if os.path.isfile(args.config):
         config_path = args.config
     elif os.path.isfile(default_config.get("CONFIG")):
@@ -46,49 +42,34 @@ def load_config(default_config):
     return config
 
 
-cfg = load_config(default_config)
-logging.basicConfig(
-    format='[%(asctime)s] %(levelname)s %(message)s',
-    datefmt="%Y.%m.%d %H:%M:%S",
-    filename=None,
-    encoding='utf-8',
-    level=logging.DEBUG
-)
-logger = logging.getLogger()
-
-
 def check_exist_report(pat, report_dir):
+    date, report_exist = check_exist_report(pat, report_dir)
+    if report_exist:
+        logging.error(f"last date log ({pat}) report exists")
+        raise FileExistsError
+
     date = datetime.datetime.strptime(pat, '%Y%m%d')
     pat = date.strftime("%Y.%m.%d")
     file_path = os.path.join(report_dir, f"report-{pat}.html")
+
     return date, os.path.isfile(file_path)
 
 
-def find_last_date_log(log_dir, report_dir):
-    for path, dirlist, filelist in os.walk(log_dir):
+def find_last_date_log(log_dir):
+    for path, dirlist, filelist in os.listdir(log_dir):
         date_list = re.findall(r'\d+', str(filelist))
-        logger.warning(date_list)
+        logger.error(date_list)
         pat = max(date_list)
-        date, report_exist = check_exist_report(pat, report_dir)
-        if report_exist:
-            logging.warning(f"last date log ({pat}) report exists")
-            raise FileExistsError
-        else:
-            for name in fnmatch.filter(filelist, f"nginx-access-ui.log-{pat}.*"):
-                logging.info(f"last date log found: {name}")
-                return date, os.path.join(path, name)
+        return pat
 
 
 def log_open(filename):
     try:
-        file = gzip.open(filename) if filename.endswith(".gz") else open(filename)
+        file = gzip.open(filename) if filename.endswith(".gz") else open(filename, encoding="utf-8")
         return file
-    except UnicodeDecodeError as error:
-        logger.exception(f"Cant read log file: {filename}\nERROR: {error}")
-        return None
     except Exception as error:
         logger.exception(f"Unknown error while reading log file: {filename}\nERROR: {error}")
-        raise error.__class__
+        raise
 
 
 def log_lines(log_file):
@@ -127,8 +108,9 @@ def collect_report_data(log_parse, allow_perc_error):
             count_none_line += 1
 
     if count_none_line > len(res) * (allow_perc_error * 0.01):
-        logger.warning(f"Too many errors while reading file\nAllow percent errors: {allow_perc_error}%")
-        raise ValueError
+        msg = f"Too many errors while reading file\nAllow percent errors: {allow_perc_error}%"
+        logger.error(msg)
+        raise RuntimeError(msg)
 
     logger.info(f"Complete collect data to report. Log processed:{len(res)}. Log unread:{count_none_line}")
     return res, count_all_time
@@ -168,7 +150,7 @@ def render_report(cfg, date, report):
 
 
 def main(cfg):
-    date, filename = find_last_date_log(cfg.get("Settings", "LOG_DIR"), cfg.get("Settings", "REPORT_DIR"))
+    date, filename = find_last_date_log(cfg.get("Settings", "LOG_DIR"))
     logfiles = log_open(filename)
     loglines = log_lines(logfiles)
     log_parse = log_parser(loglines)
@@ -178,4 +160,16 @@ def main(cfg):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", default="./config.cfg", type=str, help="Path to config")
+
+    cfg = load_config(default_config, parser.parse_args())
+    logging.basicConfig(
+        format='[%(asctime)s] %(levelname)s %(message)s',
+        datefmt="%Y.%m.%d %H:%M:%S",
+        filename=None,
+        encoding='utf-8',
+        level=logging.DEBUG
+    )
+    logger = logging.getLogger()
     main(cfg)
