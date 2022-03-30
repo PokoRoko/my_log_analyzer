@@ -27,6 +27,8 @@ default_config = {
     "LOGGING_FILE": None,
 }
 
+logger = logging.getLogger()
+
 
 def load_config(default_config, args):
     if os.path.isfile(args.config):
@@ -43,24 +45,25 @@ def load_config(default_config, args):
 
 
 def check_exist_report(pat, report_dir):
-    date, report_exist = check_exist_report(pat, report_dir)
-    if report_exist:
-        logging.error(f"last date log ({pat}) report exists")
-        raise FileExistsError
-
     date = datetime.datetime.strptime(pat, '%Y%m%d')
     pat = date.strftime("%Y.%m.%d")
     file_path = os.path.join(report_dir, f"report-{pat}.html")
-
-    return date, os.path.isfile(file_path)
+    if os.path.isfile(file_path):
+        msg = f"last date log ({pat}) report exists"
+        logging.error(msg)
+        raise FileExistsError(msg)
+    print(date)
+    return date
 
 
 def find_last_date_log(log_dir):
-    for path, dirlist, filelist in os.listdir(log_dir):
-        date_list = re.findall(r'\d+', str(filelist))
-        logger.error(date_list)
-        pat = max(date_list)
-        return pat
+    filelist = os.listdir(log_dir)
+    date_list = re.findall(r'\d+', str(filelist))
+    logger.error(date_list)
+    pat = max(date_list)
+    for name in fnmatch.filter(filelist, f"nginx-access-ui.log-{pat}.*"):
+        logging.info(f"last date log found: {name}")
+        return pat, os.path.join(log_dir, name)
 
 
 def log_open(filename):
@@ -107,7 +110,7 @@ def collect_report_data(log_parse, allow_perc_error):
         else:
             count_none_line += 1
 
-    if count_none_line > len(res) * (allow_perc_error * 0.01):
+    if count_none_line > len(res) * (int(allow_perc_error) * 0.01):
         msg = f"Too many errors while reading file\nAllow percent errors: {allow_perc_error}%"
         logger.error(msg)
         raise RuntimeError(msg)
@@ -133,13 +136,13 @@ def create_report(report_data, count_all_time):
     logger.info(f"Complete create report. Log: {len(report_data)}")
 
 
-def render_report(cfg, date, report):
+def render_report(cfg, str_date, report):
     with open("./reports/report.html", "r") as report_template:
         template = Template(report_template.read())
         report_size = int(cfg.get("Settings", "REPORT_SIZE"))
         sorted_report = sorted(list(report), key=itemgetter('time_sum'), reverse=True)
         res = template.safe_substitute(table_json=sorted_report[0:report_size])
-
+        date = datetime.datetime.strptime(str_date, '%Y%m%d')
         pat = date.strftime("%Y.%m.%d")
         file_path = os.path.join(cfg.get("Settings", "REPORT_DIR"), f"report-{pat}.html")
 
@@ -150,13 +153,14 @@ def render_report(cfg, date, report):
 
 
 def main(cfg):
-    date, filename = find_last_date_log(cfg.get("Settings", "LOG_DIR"))
-    logfiles = log_open(filename)
+    pat, last_log = find_last_date_log(cfg.get("Settings", "LOG_DIR"))
+    logfiles = log_open(last_log)
+    check_exist_report(pat, cfg.get("Settings", "REPORT_DIR"))
     loglines = log_lines(logfiles)
     log_parse = log_parser(loglines)
     report_data, count_all_time = collect_report_data(log_parse, cfg.get("Settings", "ALLOW_PERC_ERRORS"))
     report = create_report(report_data, count_all_time)
-    render_report(cfg, date, report)
+    render_report(cfg, pat, report)
 
 
 if __name__ == "__main__":
