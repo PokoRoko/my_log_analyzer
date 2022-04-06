@@ -4,9 +4,6 @@ import sys
 import unittest
 
 
-
-
-
 class TestMyLogAnalyzer(unittest.TestCase):
     nginx_log = [
         b'1.99.174.176 3b81f63526fa8  - [29/Jun/2017:05:40:45 +0300] "GET /api/1/photogenic_banners/list/?server_name=WIN7RB1 HTTP/1.1" 200 12 "-" "Python-urllib/2.7" "-" "1498704044-32900793-4708-9803879" "-" 0.127\n',
