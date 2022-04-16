@@ -63,19 +63,14 @@ def find_last_date_log(log_dir):
     filelist = os.listdir(log_dir)
     date_list = re.findall(r'\d+', str(filelist))
     pat = max(date_list)
-    for name in fnmatch.filter(filelist, f"nginx-access-ui.log-{pat}.*"):
+    for name in fnmatch.filter(filelist, f"nginx-access-ui.log-{pat}.gz"):
         logging.info(f"last date log found: {name}")
         return pat, os.path.join(log_dir, name)
 
 
 def log_open(filename):
-    try:
-        file = gzip.open(filename) if filename.endswith(".gz") else open(filename, encoding="utf-8")
-        return file
-    except Exception as error:
-        logger.exception(f"Unknown error while reading log file: {filename}\nERROR: {error}")
-        raise
-
+    file = gzip.open(filename) if filename.endswith(".gz") else open(filename, encoding="utf-8")
+    return file
 
 def log_lines(log_file):
     for item in log_file:
