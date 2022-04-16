@@ -72,6 +72,7 @@ def log_open(filename):
     file = gzip.open(filename) if filename.endswith(".gz") else open(filename, encoding="utf-8")
     return file
 
+
 def log_lines(log_file):
     for item in log_file:
         yield item

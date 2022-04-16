@@ -3,6 +3,7 @@ import logging
 import os
 import sys
 import unittest
+from log_analyzer import *
 
 
 
