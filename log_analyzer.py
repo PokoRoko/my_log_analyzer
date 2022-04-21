@@ -27,6 +27,11 @@ default_config = {
     "LOGGING_FILE": None,
 }
 
+logger = logging.getLogger()
+
+logpats = r'(?P<ipaddress>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})([ ](?P<xerb>.+)[ ]) - \[(?P<dateandtime>\d{2}\/[A-z]{3}\/\d{4}:\d{2}:\d{2}:\d{2} (\+|\-)\d{4})\] ((\"(GET|POST) )(?P<url>.+)(HTTP\/1\.\S")) (?P<statuscode>\d{3}) (?P<bytessent>\d+) (["](?P<refferer>(\-)|(.+))["]) (["](?P<useragent>.+)["]) (?P<request_time>[+-]?([0-9]*[.])?[0-9]+)'
+LOGPAT = re.compile(logpats, re.IGNORECASE)
+
 
 def load_config(default_config, args):
     if os.path.isfile(args.config):
@@ -43,46 +48,36 @@ def load_config(default_config, args):
 
 
 def check_exist_report(pat, report_dir):
-    date, report_exist = check_exist_report(pat, report_dir)
-    if report_exist:
-        logging.error(f"last date log ({pat}) report exists")
-        raise FileExistsError
-
     date = datetime.datetime.strptime(pat, '%Y%m%d')
     pat = date.strftime("%Y.%m.%d")
     file_path = os.path.join(report_dir, f"report-{pat}.html")
+    if os.path.isfile(file_path):
+        msg = f"last date log ({pat}) report exists"
+        logging.error(msg)
+        raise FileExistsError(msg)
 
-    return date, os.path.isfile(file_path)
+    return date
 
 
 def find_last_date_log(log_dir):
-    for path, dirlist, filelist in os.listdir(log_dir):
-        date_list = re.findall(r'\d+', str(filelist))
-        logger.error(date_list)
-        pat = max(date_list)
-        return pat
+    filelist = os.listdir(log_dir)
+    date_list = re.findall(r'\d+', str(filelist))
+    pat = max(date_list)
+    for name in fnmatch.filter(filelist, f"nginx-access-ui.log-{pat}.*"):
+        logging.info(f"last date log found: {name}")
+        return pat, os.path.join(log_dir, name)
 
 
 def log_open(filename):
-    try:
-        file = gzip.open(filename) if filename.endswith(".gz") else open(filename, encoding="utf-8")
-        return file
-    except Exception as error:
-        logger.exception(f"Unknown error while reading log file: {filename}\nERROR: {error}")
-        raise
-
-
-def log_lines(log_file):
-    for item in log_file:
+    file = gzip.open(filename) if filename.endswith(".gz") else open(filename, encoding="utf-8")
+    for item in file:
         yield item
 
 
 def log_parser(lines):
-    logpats = r'(?P<ipaddress>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})([ ](?P<xerb>.+)[ ]) - \[(?P<dateandtime>\d{2}\/[A-z]{3}\/\d{4}:\d{2}:\d{2}:\d{2} (\+|\-)\d{4})\] ((\"(GET|POST) )(?P<url>.+)(HTTP\/1\.\S")) (?P<statuscode>\d{3}) (?P<bytessent>\d+) (["](?P<refferer>(\-)|(.+))["]) (["](?P<useragent>.+)["]) (?P<request_time>[+-]?([0-9]*[.])?[0-9]+)'
-    logpat = re.compile(logpats, re.IGNORECASE)
-
     for line in lines:
-        data = re.search(logpat, line.decode())
+        line = line if type(line) == str else line.decode()
+        data = re.search(LOGPAT, line)
         if data:
             yield (data.groupdict())
         else:
@@ -107,7 +102,7 @@ def collect_report_data(log_parse, allow_perc_error):
         else:
             count_none_line += 1
 
-    if count_none_line > len(res) * (allow_perc_error * 0.01):
+    if count_none_line > len(res) * (int(allow_perc_error) * 0.01):
         msg = f"Too many errors while reading file\nAllow percent errors: {allow_perc_error}%"
         logger.error(msg)
         raise RuntimeError(msg)
@@ -133,15 +128,19 @@ def create_report(report_data, count_all_time):
     logger.info(f"Complete create report. Log: {len(report_data)}")
 
 
-def render_report(cfg, date, report):
+def get_path_report(str_date):
+    date = datetime.datetime.strptime(str_date, '%Y%m%d')
+    pat = date.strftime("%Y.%m.%d")
+    file_path = os.path.join(cfg.get("Settings", "REPORT_DIR"), f"report-{pat}.html")
+    return file_path
+
+
+def render_report(cfg, file_path, report):
     with open("./reports/report.html", "r") as report_template:
         template = Template(report_template.read())
         report_size = int(cfg.get("Settings", "REPORT_SIZE"))
         sorted_report = sorted(list(report), key=itemgetter('time_sum'), reverse=True)
         res = template.safe_substitute(table_json=sorted_report[0:report_size])
-
-        pat = date.strftime("%Y.%m.%d")
-        file_path = os.path.join(cfg.get("Settings", "REPORT_DIR"), f"report-{pat}.html")
 
         report_file = open(file_path, "w")
         report_file.write(res)
@@ -150,13 +149,14 @@ def render_report(cfg, date, report):
 
 
 def main(cfg):
-    date, filename = find_last_date_log(cfg.get("Settings", "LOG_DIR"))
-    logfiles = log_open(filename)
-    loglines = log_lines(logfiles)
+    pat, last_log = find_last_date_log(cfg.get("Settings", "LOG_DIR"))
+    check_exist_report(pat, cfg.get("Settings", "REPORT_DIR"))
+    loglines = (i for i in log_open(last_log))
     log_parse = log_parser(loglines)
     report_data, count_all_time = collect_report_data(log_parse, cfg.get("Settings", "ALLOW_PERC_ERRORS"))
     report = create_report(report_data, count_all_time)
-    render_report(cfg, date, report)
+    path_report = get_path_report(pat)
+    render_report(cfg, path_report, report)
 
 
 if __name__ == "__main__":
@@ -172,4 +172,10 @@ if __name__ == "__main__":
         level=logging.DEBUG
     )
     logger = logging.getLogger()
+
     main(cfg)
+
+    # try:
+    #     main(cfg)
+    # except Exception as error:
+    #     logger.error(f"Unknown error from My_log_analyzer. ERROR: {error}")
