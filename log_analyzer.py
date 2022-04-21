@@ -63,24 +63,21 @@ def find_last_date_log(log_dir):
     filelist = os.listdir(log_dir)
     date_list = re.findall(r'\d+', str(filelist))
     pat = max(date_list)
-    for name in fnmatch.filter(filelist, f"nginx-access-ui.log-{pat}.gz"):
+    for name in fnmatch.filter(filelist, f"nginx-access-ui.log-{pat}.*"):
         logging.info(f"last date log found: {name}")
         return pat, os.path.join(log_dir, name)
 
 
 def log_open(filename):
     file = gzip.open(filename) if filename.endswith(".gz") else open(filename, encoding="utf-8")
-    return file
-
-
-def log_lines(log_file):
-    for item in log_file:
+    for item in file:
         yield item
 
 
 def log_parser(lines):
     for line in lines:
-        data = re.search(LOGPAT, line.decode())
+        line = line if type(line) == str else line.decode()
+        data = re.search(LOGPAT, line)
         if data:
             yield (data.groupdict())
         else:
@@ -153,9 +150,8 @@ def render_report(cfg, file_path, report):
 
 def main(cfg):
     pat, last_log = find_last_date_log(cfg.get("Settings", "LOG_DIR"))
-    logfiles = log_open(last_log)
     check_exist_report(pat, cfg.get("Settings", "REPORT_DIR"))
-    loglines = (i for i in logfiles)
+    loglines = (i for i in log_open(last_log))
     log_parse = log_parser(loglines)
     report_data, count_all_time = collect_report_data(log_parse, cfg.get("Settings", "ALLOW_PERC_ERRORS"))
     report = create_report(report_data, count_all_time)
@@ -176,7 +172,10 @@ if __name__ == "__main__":
         level=logging.DEBUG
     )
     logger = logging.getLogger()
-    try:
-        main(cfg)
-    except Exception as error:
-        logger.error(f"Unknown error from My_log_analyzer. ERROR: {error}")
+
+    main(cfg)
+
+    # try:
+    #     main(cfg)
+    # except Exception as error:
+    #     logger.error(f"Unknown error from My_log_analyzer. ERROR: {error}")

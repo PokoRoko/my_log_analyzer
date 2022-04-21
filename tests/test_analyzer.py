@@ -77,12 +77,11 @@ class TestMyLogAnalyzer(unittest.TestCase):
         os.remove("./" + self.name_report_file)
 
     def test_log_open(self):
-        log_file = open(self.name_log_file, "w")
+        log_file = open(self.name_log_file, "r")
         file = log_open(self.name_log_file)
-        self.assertEqual(file.filename, self.name_log_file)
-        self.assertEqual(file.read(), b'')
+        self.assertEqual(len(list(log_file)), len(list(file)))
         with self.assertRaises(FileNotFoundError):
-            file = log_open("Bad_name")
+            file = log_open("Bad_name").__next__()
         log_file.close()
         file.close()
 
